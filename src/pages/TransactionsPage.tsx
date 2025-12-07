@@ -1,15 +1,18 @@
 import React, { useState, useRef } from 'react';
-import type { Transaction } from '../types';
+import type { Transaction, Asset, Liability } from '../types';
 import { TransactionType } from '../types';
 import { dataService } from '../services/storageService';
 import { mockCamsFetch } from '../services/camsAdapter';
 import { geminiService } from '../services/geminiService';
 import { Card, Button, Input } from '../components/ui';
 import { formatCurrency } from '../utils';
+import { extractTextFromPdfArrayBuffer } from './pdfHelper';
 
 // Declarations for external libraries added in index.html
 import * as XLSX from 'xlsx';
 import * as PDFLib from 'pdf-lib';
+
+// Minimal local type to represent the parts of PDF.js we use.
 
 interface Props {
   transactions: Transaction[];
@@ -36,6 +39,9 @@ const TransactionsPage: React.FC<Props> = ({ transactions, onUpdate }) => {
   // AA State
   const [isSyncingAA, setIsSyncingAA] = useState(false);
   const [aaStep, setAaStep] = useState<'idle' | 'consent' | 'fetching'>('idle');
+  // AI preview / import control
+  const [autoImport, setAutoImport] = useState(true);
+  const [parsedPreview, setParsedPreview] = useState<{ transactions: Transaction[]; assets: Asset[]; liabilities: Liability[] } | null>(null);
 
   // --- Document Analysis Logic ---
   
@@ -45,31 +51,26 @@ const TransactionsPage: React.FC<Props> = ({ transactions, onUpdate }) => {
         
         const txCount = result.transactions?.length || 0;
         const assetCount = result.assets?.length || 0;
-        const liabCount = result.liabilities?.length || 0;
-
         // If appended, let storage service handle duplicates
-        // Note: override only happens on the FIRST file of a batch if mode is override.
-        // Subsequent files in the queue must append to that first result.
-        const isFirstFileOfOverride = importMode === 'override' && fileQueueRef.current.length === stagedFiles.length - 1; 
 
-        // However, since we clear stagedFiles on start, we can't easily track "first file" this way.
-        // Instead, we rely on the fact that `dataService.overrideData` replaces everything.
-        // Strategy: 
-        // 1. If mode is override, we should ideally clear DB *once* before processing batch.
-        // 2. But to keep it simple: We treat "Override" as "Clear before first file, then append others".
-        // Implementation: We will handle the "Clear" action in `startBatchAnalysis` before processing starts.
-
-        await dataService.importExternalData(
-            result.assets || [],
-            result.transactions || [],
-            result.liabilities || []
-        );
-        
-        setImportStatus(`Processed: ${txCount} Txns, ${assetCount} Assets found.`);
-        onUpdate();
-    } catch (err: any) {
-        console.error(err);
-        setImportStatus(`Analysis Failed: ${err.message || 'Unknown error'}`);
+        if (autoImport) {
+          await dataService.importExternalData(
+              result.assets || [],
+              result.transactions || [],
+              result.liabilities || []
+          );
+          setImportStatus(`Imported: ${txCount} Txns, ${assetCount} Assets.`);
+          onUpdate();
+          } else {
+          // Hold preview for user confirmation
+          setParsedPreview({ transactions: result.transactions || [], assets: result.assets || [], liabilities: result.liabilities || [] });
+          setImportStatus(`Ready: ${txCount} Txns, ${assetCount} Assets (awaiting confirmation)`);
+          // Pause processing until user confirms or rejects
+          return;
+        }
+    } catch (err) {
+      console.error(err);
+      setImportStatus(`Analysis Failed: ${(err as Error).message || 'Unknown error'}`);
     } finally {
         // If queue has more, process next
         if (fileQueueRef.current.length > 0) {
@@ -81,22 +82,23 @@ const TransactionsPage: React.FC<Props> = ({ transactions, onUpdate }) => {
     }
   };
 
-  const processPDF = async (arrayBuffer: ArrayBuffer, password?: string) => {
+    const processPDF = async (arrayBuffer: ArrayBuffer) => {
       try {
           // Attempt to load the PDF
           let pdfDoc;
           try {
-             if (password) {
-                 pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer, { password });
-             } else {
-                 pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer);
-             }
-          } catch (e: any) {
-              if (e.message && (e.message.includes('encrypted') || e.message.includes('Password'))) {
-                  setPasswordRequired(true);
-                  setIsProcessingFile(false); // Stop spinner, wait for user input
-                  return;
-              }
+         // Always attempt to load without options first. Passing unknown options
+         // (like a `password` prop) to pdf-lib can cause misleading errors.
+         pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer);
+          } catch (e) {
+          const msg = String((e as Error)?.message || '');
+          console.log('PDF load error', e);
+          // Only treat as password-required when error clearly indicates encryption
+          if (/encrypted|password protected|password required/i.test(msg)) {
+            setPasswordRequired(true);
+            setIsProcessingFile(false); // Stop spinner, wait for user input
+            return;
+          }
               throw e;
           }
 
@@ -109,9 +111,9 @@ const TransactionsPage: React.FC<Props> = ({ transactions, onUpdate }) => {
           
           await processAndSendToGemini(savedBase64, 'application/pdf');
 
-      } catch (err: any) {
+        } catch (err) {
           setIsProcessingFile(false);
-          setImportStatus(`PDF Error: ${err.message}`);
+          setImportStatus(`PDF Error: ${(err as Error).message}`);
           // Proceed to next even on error
           if (fileQueueRef.current.length > 0) processNextFile();
       }
@@ -126,9 +128,9 @@ const TransactionsPage: React.FC<Props> = ({ transactions, onUpdate }) => {
           
           const base64Data = btoa(csvText);
           await processAndSendToGemini(base64Data, 'text/csv');
-      } catch (err: any) {
+        } catch (err) {
           setIsProcessingFile(false);
-          setImportStatus(`Excel Error: ${err.message}`);
+          setImportStatus(`Excel Error: ${(err as Error).message}`);
           if (fileQueueRef.current.length > 0) processNextFile();
       }
   };
@@ -163,9 +165,9 @@ const TransactionsPage: React.FC<Props> = ({ transactions, onUpdate }) => {
               base64Reader.readAsDataURL(file);
          }
  
-       } catch (err: any) {
+       } catch (err) {
          setIsProcessingFile(false);
-         setImportStatus(`Error: ${err.message}`);
+         setImportStatus(`Error: ${(err as Error).message}`);
          if (fileQueueRef.current.length > 0) processNextFile();
        }
      };
@@ -202,17 +204,101 @@ const TransactionsPage: React.FC<Props> = ({ transactions, onUpdate }) => {
       processNextFile();
   };
 
-  const handlePasswordSubmit = () => {
-      if (pendingFileRef.current && pdfPassword) {
-          setIsProcessingFile(true);
-          const reader = new FileReader();
-          reader.onload = async (e) => {
-             const arrayBuffer = e.target?.result as ArrayBuffer;
-             await processPDF(arrayBuffer, pdfPassword);
-          };
-          reader.readAsArrayBuffer(pendingFileRef.current);
+  // const handlePasswordSubmit = () => {
+  //     if (pendingFileRef.current && pdfPassword) {
+  //         setIsProcessingFile(true);
+  //         const reader = new FileReader();
+  //         reader.onload = async (e) => {
+  //            const arrayBuffer = e.target?.result as ArrayBuffer;
+
+  //            // Try to use pdf-lib first (we already attempted without password),
+  //            // but pdf-lib doesn't reliably support password-based decryption.
+  //            // Use PDF.js (pdfjs-dist) as a fallback to open with password and
+  //            // extract textual content which we will forward to the AI parser.
+  //            try {
+  //              // Try several possible package entry points for pdfjs-dist until one resolves.
+  //              const candidates = [
+  //                'pdfjs-dist/legacy/build/pdf',
+  //                'pdfjs-dist/build/pdf',
+  //                'pdfjs-dist/es5/build/pdf',
+  //                'pdfjs-dist'
+  //              ];
+  //              let pdfjs: unknown = null;
+
+  //              const isPdfJs = (v: unknown): v is { getDocument: (opts: unknown) => { promise: Promise<unknown> } } =>
+  //                typeof v === 'object' && v !== null && 'getDocument' in v;
+  //              for (const p of candidates) {
+  //                try {
+  //                  const mod = await import(/* @vite-ignore */ p);
+  //                  // Some distributions export the PDF.js API as the default export,
+  //                  // while others expose it as named exports. Normalize both.
+  //                  const candidate = (mod && (mod as unknown as { default?: unknown }).default) ? (mod as unknown as { default?: unknown }).default : mod;
+  //                  if (isPdfJs(candidate)) {
+  //                    pdfjs = candidate as { getDocument: (opts: unknown) => { promise: Promise<unknown> } };
+  //                    console.debug('Loaded PDF.js from', p);
+  //                    break;
+  //                  }
+  //                } catch {
+  //                  // try next candidate
+  //                }
+  //              }
+  //              if (!isPdfJs(pdfjs)) throw new Error('PDF.js not available');
+
+  //              const loadingTask = pdfjs.getDocument({ data: arrayBuffer, password: pdfPassword });
+  //              const pdf = await loadingTask.promise as { numPages: number; getPage: (n: number) => Promise<{ getTextContent: () => Promise<{ items: unknown[] }> }> };
+
+  //              // Extract text from all pages
+  //              const pageTexts: string[] = [];
+  //              for (let i = 1; i <= pdf.numPages; i++) {
+  //                const page = await pdf.getPage(i);
+  //                const content = await page.getTextContent();
+  //                const strings = content.items.map((it: unknown) => ((it as { str?: string }).str || '')).join(' ');
+  //                pageTexts.push(strings);
+  //              }
+
+  //              const allText = pageTexts.join('\n');
+  //              const base64Text = btoa(unescape(encodeURIComponent(allText)));
+  //              // Send extracted plain text to the AI parser (CSV/Text fallback)
+  //              await processAndSendToGemini(base64Text, 'text/plain');
+  //              setPasswordRequired(false);
+  //              setPdfPassword('');
+  //              pendingFileRef.current = null;
+  //            } catch (err) {
+  //              // If PDF.js fails (bad password or malformed PDF), surface message
+  //              console.error('PDF unlock error', err);
+  //              setImportStatus(`Unable to unlock/process PDF: ${(err as Error).message || 'Invalid password or malformed PDF'}`);
+  //              setIsProcessingFile(false);
+  //              // keep prompting for password
+  //            }
+  //         };
+  //         reader.readAsArrayBuffer(pendingFileRef.current);
+  //     }
+  // };
+
+
+const handlePasswordSubmit = () => {
+  if (pendingFileRef.current && pdfPassword) {
+    setIsProcessingFile(true);
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const arrayBuffer = e.target?.result as ArrayBuffer;
+      try {
+        const allText = await extractTextFromPdfArrayBuffer(arrayBuffer, pdfPassword);
+        const base64Text = btoa(unescape(encodeURIComponent(allText)));
+        await processAndSendToGemini(base64Text, 'text/plain');
+        setPasswordRequired(false);
+        setPdfPassword('');
+        pendingFileRef.current = null;
+      } catch (err) {
+        console.error('PDF unlock error', err);
+        setImportStatus(`Unable to unlock/process PDF: ${(err as Error).message || 'Invalid password or malformed PDF'}`);
+        setIsProcessingFile(false);
       }
-  };
+    };
+    reader.readAsArrayBuffer(pendingFileRef.current);
+  }
+};
+
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -243,8 +329,8 @@ const TransactionsPage: React.FC<Props> = ({ transactions, onUpdate }) => {
         setAaStep('idle');
         setImportStatus(`Successfully synced ${assets.length} Mutual Funds and ${transactions.length} recent entries via CAMS.`);
         setTimeout(() => setImportStatus(null), 5000);
-    } catch (e) {
-        setImportStatus('Failed to sync with Account Aggregator.');
+    } catch {
+      setImportStatus('Failed to sync with Account Aggregator.');
     }
   };
 
@@ -288,6 +374,12 @@ const TransactionsPage: React.FC<Props> = ({ transactions, onUpdate }) => {
                     <span>Override (Clear all first)</span>
                   </label>
                </div>
+
+              {/* Auto-import toggle */}
+              <div className="flex items-center gap-2 text-sm mb-4">
+                <input type="checkbox" id="autoImport" checked={autoImport} onChange={(e) => setAutoImport(e.target.checked)} className="accent-ink" />
+                <label htmlFor="autoImport" className="text-sm">Auto-import AI results</label>
+              </div>
 
                {/* Drop Zone */}
                {passwordRequired ? (
@@ -366,6 +458,29 @@ const TransactionsPage: React.FC<Props> = ({ transactions, onUpdate }) => {
                        </div>
                    </div>
                )}
+
+              {/* AI Parsed Preview (when autoImport is off) */}
+              {parsedPreview && (
+                <div className="mt-4 bg-paper-contrast border border-ink/10 p-4">
+                  <h4 className="font-serif font-bold mb-2">AI Analysis Preview</h4>
+                  <p className="text-sm text-ink/60 mb-2">Detected <strong>{parsedPreview.transactions.length}</strong> transactions, <strong>{parsedPreview.assets.length}</strong> assets, <strong>{parsedPreview.liabilities.length}</strong> liabilities.</p>
+                  <div className="max-h-48 overflow-y-auto text-xs font-mono bg-white p-2 border border-ink/5 mb-3">
+                    <pre className="whitespace-pre-wrap wrap-break-word">{JSON.stringify(parsedPreview, null, 2)}</pre>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="secondary" onClick={() => { setParsedPreview(null); setImportStatus(null); /* resume processing */ processNextFile(); }}>Reject</Button>
+                    <Button onClick={async () => {
+                      // Import and continue
+                      await dataService.importExternalData(parsedPreview.assets, parsedPreview.transactions, parsedPreview.liabilities);
+                      setImportStatus(`Imported ${parsedPreview.transactions.length} txns`);
+                      setParsedPreview(null);
+                      onUpdate();
+                      // continue processing queue
+                      processNextFile();
+                    }}>Import</Button>
+                  </div>
+                </div>
+              )}
             </div>
           </Card>
 
