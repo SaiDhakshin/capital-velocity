@@ -379,7 +379,7 @@ const LandingPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-paper text-ink font-body flex flex-col">
       {/* Navigation */}
-      <nav className="flex justify-between items-center p-6 max-w-7xl mx-auto w-full sticky top-0 bg-paper/90 backdrop-blur-sm z-50 border-b border-ink/5">
+      <nav className="w-full flex justify-between items-center p-6 mx-auto w-full sticky top-0 bg-paper/90 backdrop-blur-sm z-50 border-b border-ink/5">
         <div className="flex flex-col">
            <span className="font-serif font-bold text-2xl tracking-tighter text-ink border-b-2 border-ink pb-1">CAPITAL VELOCITY</span>
         </div>

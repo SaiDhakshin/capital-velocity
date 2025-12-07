@@ -1,23 +1,36 @@
-/* src/index.css */
 /* Google fonts */
 @import url('https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;0,700;1,400&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&display=swap');
 
-/* Tailwind v4 single import */
+/* Tailwind v4 import */
 @import "tailwindcss";
 
-/* optional base global styles using your tokens */
-:root{
+/* Tailwind v4 Theme Definition */
+@theme {
+  --color-paper: #fdfbf7;
+  --color-paper-dark: #f3f1e8;
+  --color-paper-contrast: #ffffff;
+
+  --color-ink: #1c1917;
+  --color-ink-light: #44403c;
+  --color-ink-faint: #a8a29e;
+
+  --color-accent-green: #15803d;
+  --color-accent-red: #b91c1c;
+  --color-accent-blue: #1d4ed8;
+  --color-accent-gold: #b45309;
+
+  --font-sans: "Crimson Text", serif;
   --font-serif: "Playfair Display", serif;
-  --font-crimson: "Crimson Text", serif;
+  --font-body: "Crimson Text", serif;
 }
 
-/* small opinionated defaults */
-html,body,#root {
+/* global defaults */
+html, body, #root {
   height: 100%;
+  margin: 0;
 }
 
 body {
-  font-family: var(--font-crimson);
-  @apply bg-white;
-  margin: 0;
+  font-family: var(--font-body);
+  background-color: var(--color-paper);
 }
