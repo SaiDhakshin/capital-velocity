@@ -38,7 +38,7 @@ export const CashflowDiagram: React.FC<Props> = ({ snapshot, assets, liabilities
         </div>
       </div>
       
-      <div className="relative w-full aspect-[4/3] lg:aspect-[2/1] bg-paper-contrast">
+      <div className="relative w-full aspect-[4/3] lg:aspect-[2/1] bg-paper-contrast pt-6">
         <svg 
           viewBox="0 0 1000 600" 
           className="w-full h-full font-serif" 

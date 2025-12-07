@@ -7,6 +7,7 @@ import { formatCurrency } from '../utils';
 // This service mimics the "Worker" role in the monorepo that would process insights
 export class GeminiService {
   private ai: GoogleGenAI;
+  API_KEY = import.meta.env.VITE_API_KEY || '';
 
   constructor() {
     // In a real app, never expose keys on client. This is strictly for the Phase 0 prototype.
@@ -20,8 +21,8 @@ export class GeminiService {
     assets: Asset[], 
     liabilities: Liability[]
   ): Promise<string> {
-    if (!process.env.API_KEY) {
-      return "Gemini API Key is missing. Configure `process.env.API_KEY` to enable the Financial Coach.";
+    if (!this.API_KEY) {
+      return "Gemini API Key is missing. Configure `API_KEY` to enable the Financial Coach.";
     }
 
     const prompt = `
@@ -58,7 +59,7 @@ export class GeminiService {
   }
 
   async parseFinancialDocument(data: string, mimeType: string): Promise<{ transactions: any[], assets: any[], liabilities: any[] }> {
-    if (!process.env.API_KEY) {
+    if (!this.API_KEY) {
       throw new Error("Gemini API Key is missing.");
     }
 

@@ -1,6 +1,7 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import type { FinancialSnapshot, Asset, Liability } from '../types';
-import { Card, StatBox } from '../components/ui';
+import { Card, StatBox, Button } from '../components/ui';
 import NetWorthChart from '../components/NetWorthChart';
 import FinancialAdvisor from '../components/FinancialAdvisor';
 import { CashflowDiagram } from '../components/CashflowDiagram';
@@ -18,8 +19,23 @@ const DashboardPage: React.FC<Props> = ({ snapshot, assets, liabilities }) => {
     ? ((snapshot.passiveIncome / snapshot.monthlyExpenses) * 100).toFixed(1)
     : '100';
 
+  const isEmpty = assets.length === 0 && liabilities.length === 0;
   return (
     <div className="space-y-12 pb-12">
+      {isEmpty && (
+        <div className="max-w-4xl mx-auto">
+          <div className="mb-6">
+            <Card className="text-center bg-paper-dark border border-ink/10 p-8">
+              <h2 className="text-2xl font-serif font-bold mb-2">Your ledger looks empty</h2>
+              <p className="text-ink/60 mb-4">Import bank statements, portfolio reports, or upload documents to automatically populate your ledger.</p>
+              <div className="flex justify-center gap-4">
+                <Link to="/app/transactions"><Button>Upload / Import Statements</Button></Link>
+                <Link to="/app/assets"><Button variant="secondary">Add Manually</Button></Link>
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
       {/* Header Area */}
       <div className="flex flex-col md:flex-row justify-between items-end gap-6 pb-6 border-b border-ink/10">
         <div className="max-w-2xl">

@@ -17,6 +17,7 @@ const AssetsPage: React.FC<Props> = ({ assets, liabilities, onUpdate }) => {
   const [activeTab, setActiveTab] = useState<'assets' | 'liabilities'>('assets');
   const [isAdding, setIsAdding] = useState(false);
   const [formData, setFormData] = useState<any>({});
+  const [editing, setEditing] = useState<null | { kind: 'asset' | 'liability'; id: string; data: any }>(null);
 
   // Effect to switch tab based on URL query param (e.g. ?tab=liabilities)
   useEffect(() => {
@@ -135,49 +136,104 @@ const AssetsPage: React.FC<Props> = ({ assets, liabilities, onUpdate }) => {
         {activeTab === 'assets' && assets.map(asset => (
           <Card key={asset.id} className="hover:shadow-md transition-shadow relative overflow-hidden group">
             <div className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <span className="text-[10px] font-bold uppercase bg-ink text-white px-2 py-1">Edit</span>
+                <button
+                  onClick={() => setEditing({ kind: 'asset', id: asset.id, data: { ...asset } })}
+                  className="text-[10px] font-bold uppercase bg-ink text-white px-2 py-1"
+                >
+                  Edit
+                </button>
             </div>
-            <div className="flex justify-between items-start mb-4">
-              <span className="text-ink/40 text-xs font-serif font-bold uppercase tracking-widest">{asset.type}</span>
-              <span className="text-ink/40 text-xs font-serif italic">{asset.purchaseDate}</span>
-            </div>
-            <h3 className="font-serif font-bold text-2xl text-ink mb-1">{asset.name}</h3>
-            {asset.ticker && <p className="text-xs text-ink/50 font-mono mb-4">[{asset.ticker}]</p>}
-            
-            <div className="mt-6 pt-4 border-t border-ink/5 space-y-3">
-              <div className="flex justify-between items-end">
-                <span className="text-sm text-ink/60 font-serif italic">Value</span>
-                <span className="font-bold text-lg text-ink font-serif">{formatCurrency(asset.currentValue)}</span>
+
+            {editing && editing.kind === 'asset' && editing.id === asset.id ? (
+              <div className="space-y-4">
+                <Input label="Name" value={editing.data.name} onChange={e => setEditing(s => s && s.kind === 'asset' ? { ...s, data: { ...s.data, name: e.target.value } } : s)} />
+                <Input label="Ticker" value={editing.data.ticker || ''} onChange={e => setEditing(s => s && s.kind === 'asset' ? { ...s, data: { ...s.data, ticker: e.target.value } } : s)} />
+                <Select label="Class" options={Object.values(AssetType).map(t => ({ label: t, value: t }))} value={editing.data.type} onChange={e => setEditing(s => s && s.kind === 'asset' ? { ...s, data: { ...s.data, type: e.target.value } } : s)} />
+                <div className="grid grid-cols-2 gap-4">
+                  <Input label="Market Value" type="number" value={String(editing.data.currentValue || 0)} onChange={e => setEditing(s => s && s.kind === 'asset' ? { ...s, data: { ...s.data, currentValue: Number(e.target.value) } } : s)} />
+                  <Input label="Cost Basis" type="number" value={String(editing.data.costBasis || 0)} onChange={e => setEditing(s => s && s.kind === 'asset' ? { ...s, data: { ...s.data, costBasis: Number(e.target.value) } } : s)} />
+                </div>
+                <Input label="Monthly Cashflow" type="number" value={String(editing.data.monthlyCashflow || 0)} onChange={e => setEditing(s => s && s.kind === 'asset' ? { ...s, data: { ...s.data, monthlyCashflow: Number(e.target.value) } } : s)} />
+                <div className="flex justify-end gap-4 mt-2">
+                  <Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
+                  <Button onClick={() => {
+                    dataService.updateAsset({ ...editing.data, id: asset.id });
+                    setEditing(null);
+                    onUpdate();
+                  }}>Save</Button>
+                </div>
               </div>
-              <div className="flex justify-between items-end">
-                <span className="text-sm text-ink/60 font-serif italic">Cashflow</span>
-                <span className="font-bold text-lg text-accent-green font-serif">+{formatCurrency(asset.monthlyCashflow)}/mo</span>
-              </div>
-            </div>
+            ) : (
+              <>
+                <div className="flex justify-between items-start mb-4">
+                  <span className="text-ink/40 text-xs font-serif font-bold uppercase tracking-widest">{asset.type}</span>
+                  <span className="text-ink/40 text-xs font-serif italic">{asset.purchaseDate}</span>
+                </div>
+                <h3 className="font-serif font-bold text-2xl text-ink mb-1">{asset.name}</h3>
+                {asset.ticker && <p className="text-xs text-ink/50 font-mono mb-4">[{asset.ticker}]</p>}
+                <div className="mt-6 pt-4 border-t border-ink/5 space-y-3">
+                  <div className="flex justify-between items-end">
+                    <span className="text-sm text-ink/60 font-serif italic">Value</span>
+                    <span className="font-bold text-lg text-ink font-serif">{formatCurrency(asset.currentValue)}</span>
+                  </div>
+                  <div className="flex justify-between items-end">
+                    <span className="text-sm text-ink/60 font-serif italic">Cashflow</span>
+                    <span className="font-bold text-lg text-accent-green font-serif">+{formatCurrency(asset.monthlyCashflow)}/mo</span>
+                  </div>
+                </div>
+              </>
+            )}
           </Card>
         ))}
 
         {activeTab === 'liabilities' && liabilities.map(liability => (
-           <Card key={liability.id} className="hover:shadow-md transition-shadow relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <span className="text-[10px] font-bold uppercase bg-ink text-white px-2 py-1">Edit</span>
-            </div>
-            <div className="flex justify-between items-start mb-4">
-              <span className="text-ink/40 text-xs font-serif font-bold uppercase tracking-widest">{liability.type}</span>
-            </div>
-            <h3 className="font-serif font-bold text-2xl text-ink mb-4">{liability.name}</h3>
-            
-            <div className="mt-6 pt-4 border-t border-ink/5 space-y-3">
-              <div className="flex justify-between items-end">
-                <span className="text-sm text-ink/60 font-serif italic">Debt</span>
-                <span className="font-bold text-lg text-ink font-serif">{formatCurrency(liability.outstandingBalance)}</span>
+             <Card key={liability.id} className="hover:shadow-md transition-shadow relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => setEditing({ kind: 'liability', id: liability.id, data: { ...liability } })}
+                    className="text-[10px] font-bold uppercase bg-ink text-white px-2 py-1"
+                  >
+                    Edit
+                  </button>
               </div>
-              <div className="flex justify-between items-end">
-                <span className="text-sm text-ink/60 font-serif italic">Outflow</span>
-                <span className="font-bold text-lg text-accent-red font-serif">-{formatCurrency(liability.monthlyPayment)}/mo</span>
-              </div>
-            </div>
-           </Card>
+
+              {editing && editing.kind === 'liability' && editing.id === liability.id ? (
+                <div className="space-y-4">
+                  <Input label="Name" value={editing.data.name} onChange={e => setEditing(s => s && s.kind === 'liability' ? { ...s, data: { ...s.data, name: e.target.value } } : s)} />
+                  <Select label="Class" options={Object.values(LiabilityType).map(t => ({ label: t, value: t }))} value={editing.data.type} onChange={e => setEditing(s => s && s.kind === 'liability' ? { ...s, data: { ...s.data, type: e.target.value } } : s)} />
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input label="Outstanding Balance" type="number" value={String(editing.data.outstandingBalance || 0)} onChange={e => setEditing(s => s && s.kind === 'liability' ? { ...s, data: { ...s.data, outstandingBalance: Number(e.target.value) } } : s)} />
+                    <Input label="Monthly Payment" type="number" value={String(editing.data.monthlyPayment || 0)} onChange={e => setEditing(s => s && s.kind === 'liability' ? { ...s, data: { ...s.data, monthlyPayment: Number(e.target.value) } } : s)} />
+                  </div>
+                  <Input label="Interest Rate" type="number" value={String(editing.data.interestRate || 0)} onChange={e => setEditing(s => s && s.kind === 'liability' ? { ...s, data: { ...s.data, interestRate: Number(e.target.value) } } : s)} />
+                  <div className="flex justify-end gap-4 mt-2">
+                    <Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
+                    <Button onClick={() => {
+                      dataService.updateLiability({ ...editing.data, id: liability.id });
+                      setEditing(null);
+                      onUpdate();
+                    }}>Save</Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex justify-between items-start mb-4">
+                    <span className="text-ink/40 text-xs font-serif font-bold uppercase tracking-widest">{liability.type}</span>
+                  </div>
+                  <h3 className="font-serif font-bold text-2xl text-ink mb-4">{liability.name}</h3>
+                  <div className="mt-6 pt-4 border-t border-ink/5 space-y-3">
+                    <div className="flex justify-between items-end">
+                      <span className="text-sm text-ink/60 font-serif italic">Debt</span>
+                      <span className="font-bold text-lg text-ink font-serif">{formatCurrency(liability.outstandingBalance)}</span>
+                    </div>
+                    <div className="flex justify-between items-end">
+                      <span className="text-sm text-ink/60 font-serif italic">Outflow</span>
+                      <span className="font-bold text-lg text-accent-red font-serif">-{formatCurrency(liability.monthlyPayment)}/mo</span>
+                    </div>
+                  </div>
+                </>
+              )}
+             </Card>
         ))}
       </div>
     </div>

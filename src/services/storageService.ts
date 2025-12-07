@@ -29,10 +29,21 @@ class StorageService implements IDataService {
     
     // Seed new users with sample data so the app isn't empty
     if (this.assets.length === 0 && this.transactions.length === 0) {
-       // Only seed if it's a fresh user ID
-       if (userId !== 'guest') {
-           this.seedData();
-       }
+      // Seed conditions:
+      //  - Vite dev build (import.meta.env.DEV)
+      //  - OR a runtime toggle stored in localStorage under `cv_enable_seed` (set via setSeedEnabled)
+      let isDev = false;
+      try {
+        isDev = !!((import.meta as unknown as { env?: { DEV?: boolean | string } }).env?.DEV);
+      } catch {
+        isDev = false;
+      }
+
+      const toggle = typeof localStorage !== 'undefined' && localStorage.getItem('cv_enable_seed') === 'true';
+
+      if ((isDev || toggle) && userId !== 'guest') {
+        this.seedData();
+      }
     }
   }
 
@@ -313,6 +324,14 @@ class StorageService implements IDataService {
     }
   }
 
+  updateLiability(l: Liability): void {
+    const idx = this.liabilities.findIndex(x => x.id === l.id);
+    if (idx >= 0) {
+      this.liabilities[idx] = l;
+      this.saveToStorage();
+    }
+  }
+
   getLiabilities(): Liability[] {
     return this.liabilities;
   }
@@ -361,7 +380,19 @@ class StorageService implements IDataService {
     this.transactions = [];
     this.assets = [];
     this.liabilities = [];
-    this.seedData();
+    // NOTE: seedData() intentionally not called so reset yields a fresh empty state.
+  }
+
+  // Dev helpers: toggle seed data without editing code.
+  public setSeedEnabled(enabled: boolean) {
+    localStorage.setItem('cv_enable_seed', enabled ? 'true' : 'false');
+    if (enabled && this.assets.length === 0 && this.transactions.length === 0) {
+      this.seedData();
+    }
+  }
+
+  public isSeedEnabled(): boolean {
+    return localStorage.getItem('cv_enable_seed') === 'true';
   }
 }
 

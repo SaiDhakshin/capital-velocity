@@ -39,7 +39,7 @@ const NetWorthChart: React.FC<Props> = ({ snapshot }) => {
           <Legend />
         </PieChart>
       </ResponsiveContainer>
-      <div className="text-center mt-[-110px] mb-[60px]">
+      <div className="text-center mt-[-170px] mb-[60px]">
         <span className="text-sm text-slate-500 block">Net Worth</span>
         <span className="text-xl font-bold text-slate-800">{formatCurrency(snapshot.netWorth)}</span>
       </div>
