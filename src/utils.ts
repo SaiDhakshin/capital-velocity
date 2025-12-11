@@ -7,6 +7,7 @@ export const formatCurrency = (value: number) => {
   // This allows "India-first" behavior (₹) if the browser is set to English (India) or Hindi
   let currency = 'USD';
   const region = locale.split('-')[1] || locale.split('-')[0]; // e.g. 'US' from 'en-US' or 'IN' from 'en-IN'
+  console.log('Detected region:', region);
 
   if (locale.match(/IN/i)) currency = 'INR';
   else if (locale.match(/GB/i)) currency = 'GBP';

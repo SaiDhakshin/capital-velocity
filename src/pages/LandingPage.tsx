@@ -355,7 +355,7 @@ const CoachAnimation = () => {
                 <div className="text-xs font-bold text-ink">Coach</div>
             </div>
             <div className="flex-1 space-y-3 relative overflow-hidden">
-                {messages.map((m, i) => (
+                {messages.map((_, i) => (
                     <div key={i} className={`flex gap-2 animate-fade-in-up transition-all ${i % 2 === 0 ? 'flex-row' : 'flex-row-reverse'}`}>
                          <div className={`w-8 h-8 rounded-full flex-shrink-0 ${i % 2 === 0 ? 'bg-ink' : 'bg-gray-200'}`}></div>
                          <div className={`p-2 rounded max-w-[80%] text-[10px] leading-tight shadow-sm ${i % 2 === 0 ? 'bg-ink/5 text-ink' : 'bg-accent-green/10 text-ink'}`}>
